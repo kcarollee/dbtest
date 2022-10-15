@@ -1,8 +1,8 @@
 const mongoose = require("mongoose");
-
+const bcrypt = require("bcrypt");
 // a schema that defines the DB structure
 const UserTable = new mongoose.Schema({
-  userID: {
+  _id: {
     required: true,
     type: String,
   },
@@ -26,7 +26,15 @@ const UserTable = new mongoose.Schema({
     required: true,
     type: String,
   },
+  hash_password: {
+    required: true,
+    type: String,
+  },
 });
+
+UserTable.methods.comparePassword = function (pw) {
+  return bcrypt.compareSync(password, this.hash_password);
+};
 
 const OrderTable = new mongoose.Schema({
   userID: {
@@ -56,6 +64,10 @@ const OrderTable = new mongoose.Schema({
 });
 
 const IngredientTable = new mongoose.Schema({
+  _id: {
+    required: true,
+    type: String,
+  },
   ingredientName: {
     required: true,
     type: String,
@@ -67,7 +79,7 @@ const IngredientTable = new mongoose.Schema({
 });
 
 const RiderTable = new mongoose.Schema({
-  riderID: {
+  _id: {
     required: true,
     type: String,
   },
