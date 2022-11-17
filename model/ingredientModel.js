@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 // INGREDIENTS:
 /*
-
+// USE INGREDIENTS NAME AS PRIMARY KEY
 // SALAD - VEGETABLE_MIX, CHICKEN_BREAST
 // SCRAMBLED_EGGS - EGG
 // BACON - BACON
@@ -15,16 +15,11 @@ const mongoose = require("mongoose");
 // COFFEE - COFFE_BEANS
 */
 const IngredientSchema = new mongoose.Schema({
-  /*
   _id: {
     required: true,
     type: String,
   },
-  */
-  ingredientName: {
-    required: true,
-    type: String,
-  },
+
   remainingNum: {
     required: true,
     type: Number,

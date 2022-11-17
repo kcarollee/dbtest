@@ -85,7 +85,7 @@ router.post("/user/register", async (req, res) => {
   //data.hash_password = bcrypt.hashSync(req.body.hash_password, 10);
 
   try {
-    res.status(200).json({ message: "USER REGISTERED" });
+    res.status(200).json({ status: 200 });
   } catch (error) {
     res.status(404).json({ message: error.message });
   }
@@ -184,18 +184,19 @@ router.get("/user/:userID", async (req, res) => {
 // orderID는 없고 그냥 _id로 가기
 // 주문의 _id는 백엔드에서 자동 생성되게 한다.
 // 주문 추가
-router.post("/order/:userID", async (req, res) => {
+router.post("/order", async (req, res) => {
   const newOrder = new Order({
     //_id: req.body._id,
     //orderID: req.body.orderID,
-    userID: req.params.userID,
+    userID: req.body.userID,
     userAddress: req.body.userAddress,
     totalOrderPrice: req.body.totalOrderPrice,
     orderedItems: req.body.orderedItems,
     orderStatus: req.body.orderStatus,
     orderTime: req.body.orderTime,
     orderedDinner: req.body.orderedDinner,
-    dinnerStyle: req.body.dinnerStyle,
+    dinner: req.body.dinner,
+    style: req.body.style,
   });
 
   //console.log("FIND ", req.params.userID);
@@ -220,7 +221,7 @@ router.post("/order/:userID", async (req, res) => {
     const dataToSave = await newOrder.save();
     res.status(200).json({ status: 200 });
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({ status: 404 });
   }
 });
 // 주문 내역 조회
@@ -236,7 +237,7 @@ router.get("/getUserOrders/:userID", async (req, res) => {
     const order = await Order.findOne({ _id: orderID });
     userOrderArray.push(order);
   }
-  console.log(userOrderIDArray);
+  //console.log(userOrderIDArray);
   try {
     res.status(200).json(userOrderArray);
   } catch (error) {
@@ -260,7 +261,7 @@ router.get("/getOrderDetail/:userID/:orderID", async (req, res) => {
 });
 
 // 주문 취소
-router.patch("/order/:orderID", async (req, res) => {
+router.patch("/order/:orderID/:orderStatus", async (req, res) => {
   try {
     const id = req.params.orderID;
 
@@ -269,6 +270,9 @@ router.patch("/order/:orderID", async (req, res) => {
 
     const order = await Order.findByIdAndUpdate(id, updatedData, options);
     const user = await User.findOne({ userID: order.userID });
+
+    order.orderStatus = req.params.orderStatus;
+    order.save();
     // 주문 취소함에 따라 유저 등급 다시 책정
     user.userOrderNum--;
     if (user.userOrderNum < 10) user.userLevel = "BASIC";
@@ -280,7 +284,7 @@ router.patch("/order/:orderID", async (req, res) => {
     else user.userLevel = "LEGEND";
     user.save();
 
-    res.status(200).json({ message: "CHANGED STATUS TO CANCELLED" });
+    res.status(200).json({ status: 200 });
   } catch (error) {
     res.status(404).json({ message: error.message });
   }
@@ -306,8 +310,7 @@ router.delete("/order/:orderID", async (req, res) => {
 // 식자재 등록 (미리 해두기)
 router.post("/ingredient", async (req, res) => {
   const data = new Ingredient({
-    //_id: req.body._id,
-    ingredientName: req.body.ingredientName,
+    _id: req.body._id,
     remainingNum: req.body.remainingNum,
     ingredientPrice: req.body.ingredientPrice,
   });
@@ -341,7 +344,7 @@ router.patch("/ingredient", async (req, res) => {
     });
   }
   try {
-    res.status(200).json({ message: "INGREDIENTS PATCH COMPLETED" });
+    res.status(200).json({ status: 200 });
   } catch (error) {
     res.status(404).json({ message: error.message });
   }
@@ -360,7 +363,7 @@ router.post("/cook", async (req, res) => {
 // 조리 목록 조회
 router.get("/cook", async (req, res) => {
   const order = await Order.find({
-    $or: [{ orderStatus: "ORDER_NOT_RECEIVED" }, { orderStatus: "COOKING" }],
+    $or: [{ orderStatus: "NOT_RECEIVED" }, { orderStatus: "COOKING" }],
   });
   try {
     res.status(200).json(order);
@@ -376,6 +379,24 @@ router.get("/cook/:cookID", async (req, res) => {
     const order = await Order.findOne({ _id: orderID });
     itemsToCook.push(order);
   }
+
+  let test = {
+    _id: "",
+    userID: "",
+    userAddress: "",
+    totalOrderPrice: 100,
+    orderedItems: [
+      {
+        name: "",
+        price: 50,
+        amount: 2,
+      },
+    ],
+    style: "",
+    dinner: "",
+    orderStatus: "",
+    orderTime: "",
+  };
 
   try {
     res.status(200).json(itemsToCook);
@@ -393,7 +414,7 @@ router.post("/cook/:cookID/:orderID", async (req, res) => {
   order.orderStatus = "COOKING";
   order.save();
   try {
-    res.status(200).json({ message: "CHANGED ORDER STATUS TO COOKING" });
+    res.status(200).json({ status: 200 });
   } catch (error) {
     res.status(404).json({ message: error.message });
   }
@@ -415,9 +436,7 @@ router.patch("/cook/:cookID/:orderID", async (req, res) => {
   delete cook.itemsToCook[toDeleteIndex];
   cook.save();
   try {
-    res
-      .status(200)
-      .json({ message: "CHANGED ORDER STATUS TO COOKING_FINISHED" });
+    res.status(200).json({ status: 200 });
   } catch (error) {
     res.status(404).json({ message: error.message });
   }
@@ -475,8 +494,7 @@ router.post("/delivery/:riderID/:orderID", async (req, res) => {
   rider.itemsToDeliver.push(order._id);
   rider.save();
   try {
-    const dataToSave = await data.save();
-    res.status(200).json({ message: "CHANGED STATUS TO DELIVERING" });
+    res.status(200).json({ status: 200 });
   } catch (error) {
     res.status(404).json({ message: error.message });
   }
@@ -486,7 +504,7 @@ router.post("/delivery/:riderID/:orderID", async (req, res) => {
 router.patch("/delivery/:riderID/:orderID", async (req, res) => {
   const rider = await Rider.findOne({ riderID: req.params.riderID });
   const order = await Order.findOne({ _id: req.params.orderID });
-  order.orderStatus = "DELIVERY_FINISHED";
+  order.orderStatus = "DELIVERED";
   order.save();
   // delete orderID from rider's itemsToDeliver array
   const toDeleteIndex = 0;
@@ -498,7 +516,7 @@ router.patch("/delivery/:riderID/:orderID", async (req, res) => {
   delete rider.itemsToDeliver[toDeleteIndex];
   rider.save();
   try {
-    res.status(200).json({ message: "CHANGED STATUS TO DELIVERY_FINISHED" });
+    res.status(200).json({ status: 200 });
   } catch (error) {
     res.status(404).json({ message: error.message });
   }

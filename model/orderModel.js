@@ -2,11 +2,11 @@ const mongoose = require("mongoose");
 
 // orderStatus:
 /*
-ORDER_NOT_RECEIVED 미접수
+NOT_RECEIVED 미접수
 COOKING 조리중 or 조리??
 COOKING_FINISHED 조리 완료
 DELIVERING 배달중
-DELIVERY_FINISHED 배달완료
+DELIVERED 배달완료
 CANCELLED 주문취소
 
 */
@@ -32,7 +32,8 @@ const OrderSchema = new mongoose.Schema({
     required: true,
     type: String,
   },
-  dinnerStyle: {
+
+  orderedStyle: {
     required: true,
     type: String,
   },
