@@ -153,16 +153,16 @@ router.post("/user/login", async (req, res) => {
   console.log(kakaoUser.email);
   const userEmailAddress = kakaoUser.email;
 
-  const user = await User.findOne({ _id: userEmailAddress });
-  console.log(user);
-  const toSend = {
-    _id: user._id,
-    userJWTToken: user.userJWTToken,
-    status: 200,
-    userAction: user.userAction,
-  };
   console.log(toSend);
   try {
+    const user = await User.findOne({ _id: userEmailAddress });
+    console.log(user);
+    const toSend = {
+      _id: user._id,
+      userJWTToken: user.userJWTToken,
+      status: 200,
+      userAction: user.userAction,
+    };
     res.status(200).json(toSend);
   } catch (error) {
     res.status(404).json({
