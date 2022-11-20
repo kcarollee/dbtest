@@ -1,6 +1,9 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
-const bcrypt = require("bcrypt");
+
+const passport = require("passport");
+const kakaoAuth = require("./kakaoAuth");
+
 const router = express.Router();
 /*
 const { User } = require("../model/model");
@@ -45,7 +48,9 @@ router.post("/user", async (req, res) => {
     const dataToSave = await data.save();
     res.status(200).json(dataToSave);
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({ 
+      status : 404,
+      message: error.message });
   }
 });
 */
@@ -54,10 +59,10 @@ router.post("/user", async (req, res) => {
 
 //사용자 회원가입
 router.post("/user/register", async (req, res) => {
+  /*
   const newUser = new User({
     //_id: req.body._id,
-    accessToken: req.body.accessToken,
-    userID: req.body.userID,
+    _id: req.body._id, // 카카오톡 ID가 primary key가 됩니다.
     userName: req.body.userName,
     userAddress: req.body.userAddress,
     userOrderNum: 0,
@@ -65,64 +70,105 @@ router.post("/user/register", async (req, res) => {
     userAction: req.body.userAction,
   });
   const userAction = req.body.userAction;
-  // if userAction is COOK or RIDER, generate corresponding documents
-  switch (userAction) {
-    case "COOK":
-      const newCook = new Cook({
-        cookID: req.body._id,
-      });
-      await newCook.save();
-      break;
-    case "RIDER":
-      const newRider = new Rider({
-        riderID: req.body._id,
-      });
-      await newRider.save();
-      break;
-  }
-  newUser.save();
+  */
+  const accessToken = req.body.accessToken;
+  const result = await kakaoAuth.getProfile(accessToken);
+  const kakaoUser = JSON.parse(result).kakao_account;
+  const userEmailAddress = kakaoUser.email;
+  console.log(kakaoUser);
 
-  //data.hash_password = bcrypt.hashSync(req.body.hash_password, 10);
+  // if userAction is COOK or RIDER, generate corresponding documents
 
   try {
+    const user = await User.findOne({
+      _id: userEmailAddress,
+    });
+    // 유저가 있다면
+    if (user) {
+    }
+    // 유저가 없다면 새 유저 생성
+    else {
+      const newUser = new User({
+        _id: userEmailAddress,
+        accessToken: accessToken,
+        userName: req.body.userName,
+        userAddress: req.body.userAddress,
+        userAction: req.body.userAction,
+        userOrderNum: 0,
+        userLevel: "BASIC",
+      });
+
+      const userAction = req.body.userAction;
+      const verificationCode = req.body.verificationCode;
+      // verificationCode = 1234
+      if (userAction != "USER" && verificationCode != "1234") {
+        throw "WRONG VERIFICATION CODE";
+      }
+      switch (userAction) {
+        case "COOK":
+          const newCook = new Cook({
+            cookID: userEmailAddress,
+          });
+          await newCook.save();
+          break;
+        case "RIDER":
+          const newRider = new Rider({
+            riderID: userEmailAddress,
+          });
+          await newRider.save();
+          break;
+        case "MANAGER":
+          break;
+      }
+
+      let jwtSecretKey = process.env.JWT_SECRET_KEY;
+      //console.log(jwtSecretKey);
+
+      // token generation
+      let tokenData = {
+        time: Date(),
+        kakaoToken: newUser._id, // 새 유저의 _id를 기반으로 jwtToken 생성
+      };
+
+      const token = jwt.sign(tokenData, jwtSecretKey);
+      newUser.userJWTToken = token;
+
+      newUser.save();
+    }
     res.status(200).json({ status: 200 });
   } catch (error) {
-    res.status(404).json({ message: error.message });
-  }
-});
-
-router.post("/user/login", async (req, res) => {
-  //console.log(User.findOne({ userName: req.body.userName }));
-  /*
-  let user = User.findOne({ userName: req.body.userName });
-  console.log(user);
-  if (!user || !user.comparePassword(req.body.hash_password)) {
-    return res.status(404).json({
-      message: "Authentication failed. Invalid user or password.",
+    res.status(404).json({
+      status: 404,
+      message: error.message,
     });
   }
-  return res.json({
-    token: jwt.sign(
-      {
-        _id: user._id,
-        userName: user.userName,
-        userAddress: user.userAddress,
-        userOrderNum: user.userOrderNum,
-        userLevel: user.userLevel,
-        userAction: user.userAction,
-      },
-      "RESTFULAPIs"
-    ),
-  });
-  */
 });
 
-router.post("/user/profile", async (req, res, next) => {
-  if (req.user) {
-    res.send(req.user);
-    next();
-  } else {
-    return res.status(404).json({ message: "Invalid token" });
+// 시용자 로그인
+
+router.post("/user/login", async (req, res) => {
+  const accessToken = req.body.accessToken;
+  const result = await kakaoAuth.getProfile(accessToken);
+  const kakaoUser = JSON.parse(result).kakao_account;
+  console.log(kakaoUser.email);
+  const userEmailAddress = kakaoUser.email;
+
+  const user = await User.findOne({ _id: userEmailAddress });
+  console.log(user);
+  const toSend = {
+    _id: user._id,
+    userJWTToken: user.userJWTToken,
+    status: 200,
+    userAction: user.userAction,
+  };
+  console.log(toSend);
+  try {
+    res.status(200).json(toSend);
+  } catch (error) {
+    res.status(404).json({
+      status: 404,
+      message: error.message,
+    });
   }
 });
 
@@ -130,10 +176,13 @@ router.post("/user/profile", async (req, res, next) => {
 router.delete("/user/:userID", async (req, res) => {
   try {
     const id = req.params.userID;
-    const data = await User.findOneAndDelete({ userID: id });
+    const data = await User.findOneAndDelete({ _id: id });
     res.status(200).json({ message: "USER HAS BEEN DELETED" });
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({
+      status: 404,
+      message: error.message,
+    });
   }
 });
 
@@ -146,20 +195,23 @@ router.patch("/user/:userID", async (req, res) => {
 
     //await User.findByIdAndUpdate(id, updatedData, options);
     await User.findOneAndUpdate(
-      { userID: req.params.userID },
+      { _id: req.params.userID },
       updatedData,
       options
     );
     res.status(200).json({ message: "USER PATCHED" });
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({
+      status: 404,
+      message: error.message,
+    });
   }
 });
 
 // 사용자 정보 가져오기
 router.get("/user/:userID", async (req, res) => {
   //const userOrders = await Order.find().populate;
-  const userQuery = { userID: req.params.userID };
+  const userQuery = { _id: req.params.userID };
   //console.log(userQuery);
   const user = await User.findOne(userQuery);
 
@@ -172,7 +224,7 @@ router.get("/user/:userID", async (req, res) => {
   try {
     res.status(200).json(userDto);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ status: 500, message: error.message });
   }
 });
 
@@ -202,7 +254,7 @@ router.post("/order", async (req, res) => {
   //console.log("FIND ", req.params.userID);
 
   // updating user's orderNum and saving
-  const query = { userID: req.params.userID };
+  const query = { _id: req.body.userID };
   //console.log("query", query);
   const user = await User.findOne(query);
   user.userOrderNum++;
@@ -227,7 +279,7 @@ router.post("/order", async (req, res) => {
 // 주문 내역 조회
 router.get("/getUserOrders/:userID", async (req, res) => {
   //const userOrders = await Order.find().populate;
-  const userQuery = { userID: req.params.userID };
+  const userQuery = { _id: req.params.userID };
   const user = await User.findOne(userQuery);
 
   const userOrderIDArray = user.userOrders;
@@ -241,7 +293,7 @@ router.get("/getUserOrders/:userID", async (req, res) => {
   try {
     res.status(200).json(userOrderArray);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ status: 500, message: error.message });
   }
 });
 
@@ -256,12 +308,12 @@ router.get("/getOrderDetail/:userID/:orderID", async (req, res) => {
   try {
     res.status(200).json(order);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ status: 500, message: error.message });
   }
 });
 
 // 주문 취소
-router.patch("/order/:orderID/:orderStatus", async (req, res) => {
+router.patch("/order/:orderID", async (req, res) => {
   try {
     const id = req.params.orderID;
 
@@ -269,9 +321,9 @@ router.patch("/order/:orderID/:orderStatus", async (req, res) => {
     const options = { new: true };
 
     const order = await Order.findByIdAndUpdate(id, updatedData, options);
-    const user = await User.findOne({ userID: order.userID });
+    const user = await User.findOne({ _id: order.userID });
 
-    order.orderStatus = req.params.orderStatus;
+    order.orderStatus = "CANCELLED";
     order.save();
     // 주문 취소함에 따라 유저 등급 다시 책정
     user.userOrderNum--;
@@ -286,7 +338,10 @@ router.patch("/order/:orderID/:orderStatus", async (req, res) => {
 
     res.status(200).json({ status: 200 });
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({
+      status: 404,
+      message: error.message,
+    });
   }
 });
 
@@ -301,7 +356,9 @@ router.delete("/order/:orderID", async (req, res) => {
     const data = await Order.findByIdAndDelete(id);
     res.send(`Document with ${data.name} has been deleted..`);
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({ 
+      status : 404,
+      message: error.message });
   }
 });
 */
@@ -319,7 +376,10 @@ router.post("/ingredient", async (req, res) => {
     const dataToSave = await data.save();
     res.status(200).json(dataToSave);
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({
+      status: 404,
+      message: error.message,
+    });
   }
 });
 
@@ -329,7 +389,7 @@ router.get("/ingredient", async (req, res) => {
   try {
     res.status(200).json(ingredients);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ status: 500, message: error.message });
   }
 });
 
@@ -346,7 +406,10 @@ router.patch("/ingredient", async (req, res) => {
   try {
     res.status(200).json({ status: 200 });
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({
+      status: 404,
+      message: error.message,
+    });
   }
 });
 
@@ -357,7 +420,7 @@ router.post("/cook", async (req, res) => {
   try {
     res.status(200);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ status: 500, message: error.message });
   }
 });
 // 조리 목록 조회
@@ -368,7 +431,7 @@ router.get("/cook", async (req, res) => {
   try {
     res.status(200).json(order);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ status: 500, message: error.message });
   }
 });
 // 요리사의 조리 목록 조회
@@ -380,28 +443,10 @@ router.get("/cook/:cookID", async (req, res) => {
     itemsToCook.push(order);
   }
 
-  let test = {
-    _id: "",
-    userID: "",
-    userAddress: "",
-    totalOrderPrice: 100,
-    orderedItems: [
-      {
-        name: "",
-        price: 50,
-        amount: 2,
-      },
-    ],
-    style: "",
-    dinner: "",
-    orderStatus: "",
-    orderTime: "",
-  };
-
   try {
     res.status(200).json(itemsToCook);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ status: 500, message: error.message });
   }
 });
 
@@ -416,7 +461,10 @@ router.post("/cook/:cookID/:orderID", async (req, res) => {
   try {
     res.status(200).json({ status: 200 });
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({
+      status: 404,
+      message: error.message,
+    });
   }
 });
 // 조리 완료
@@ -438,7 +486,10 @@ router.patch("/cook/:cookID/:orderID", async (req, res) => {
   try {
     res.status(200).json({ status: 200 });
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({
+      status: 404,
+      message: error.message,
+    });
   }
 });
 
@@ -455,7 +506,10 @@ router.post("/rider", async (req, res) => {
     const dataToSave = await newRider.save();
     res.status(200).json(dataToSave);
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({
+      status: 404,
+      message: error.message,
+    });
   }
 });
 
@@ -467,7 +521,7 @@ router.get("/delivery", async (req, res) => {
   try {
     res.status(200).json(order);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ status: 500, message: error.message });
   }
 });
 // 배달원의 배달 목록 조회
@@ -481,7 +535,7 @@ router.get("/delivery/:riderID", async (req, res) => {
   try {
     res.status(200).json(itemsToDeliver);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ status: 500, message: error.message });
   }
 });
 
@@ -496,7 +550,10 @@ router.post("/delivery/:riderID/:orderID", async (req, res) => {
   try {
     res.status(200).json({ status: 200 });
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({
+      status: 404,
+      message: error.message,
+    });
   }
 });
 
@@ -518,6 +575,9 @@ router.patch("/delivery/:riderID/:orderID", async (req, res) => {
   try {
     res.status(200).json({ status: 200 });
   } catch (error) {
-    res.status(404).json({ message: error.message });
+    res.status(404).json({
+      status: 404,
+      message: error.message,
+    });
   }
 });

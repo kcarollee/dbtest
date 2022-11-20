@@ -9,12 +9,14 @@ const UserSchema = new mongoose.Schema({
     type: String,
   },
   */
-  accessToken: {
+
+  // USE ID VALUE FOR NOW
+  _id: {
     required: false,
     type: String,
   },
 
-  userID: {
+  accessToken: {
     required: true,
     type: String,
   },
@@ -43,6 +45,11 @@ const UserSchema = new mongoose.Schema({
   userOrders: {
     required: false,
     type: Array,
+  },
+
+  userJWTToken: {
+    required: false,
+    type: String,
   },
   /*
   hash_password: {
