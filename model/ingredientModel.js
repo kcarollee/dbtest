@@ -3,16 +3,18 @@ const mongoose = require("mongoose");
 // INGREDIENTS:
 /*
 // USE INGREDIENTS NAME AS PRIMARY KEY
-// SALAD - VEGETABLE_MIX, CHICKEN_BREAST
-// SCRAMBLED_EGGS - EGG
-// BACON - BACON
-// BAGUETTE - BAGUETTE
+// SALAD 샐러드 - VEGETABLE_MIX 채소믹스, CHICKEN_BREAST 닭가슴살
+// SCRAMBLED_EGGS - EGG 달걀
+// BACON - BACON 베이컨
+// BAGUETTE - BAGUETTE 바케트
 
-// STEAK - BEEF, BUTTER
+// STEAK - BEEF 소고기, BUTTER 버터
 
-// WINE - WINE
-// CHAMPAGNE - CHAMPAGNE
-// COFFEE - COFFE_BEANS
+// WINE - WINE 와인
+// CHAMPAGNE - CHAMPAGNE 샴페인
+// COFFEE - COFFE_BEANS 커피원두
+
+
 */
 const IngredientSchema = new mongoose.Schema({
   _id: {

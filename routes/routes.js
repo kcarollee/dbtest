@@ -77,17 +77,26 @@ router.post("/user/register", async (req, res) => {
 
   try {
     const accessToken = req.body.accessToken;
-    const result = await kakaoAuth.getProfile(accessToken);
-    const kakaoUser = JSON.parse(result).kakao_account;
-    const userEmailAddress = kakaoUser.email;
-    console.log(kakaoUser);
+    let result;
+    let kakaoUser;
+    let userEmailAddress;
+
+    if (accessToken.includes(".com")) {
+      userEmailAddress = accessToken;
+    } else {
+      result = await kakaoAuth.getProfile(accessToken);
+      kakaoUser = JSON.parse(result).kakao_account;
+      userEmailAddress = kakaoUser.email;
+      console.log(kakaoUser);
+    }
+
     const user = await User.findOne({
       _id: userEmailAddress,
     });
     // 유저가 있다면
     if (user != undefined) {
-      console.log("USER ALREADY EXISTS");
-      throw "USER ALREADY EXISTS";
+      //console.log("USER ALREADY EXISTS");
+      //throw "USER ALREADY EXISTS";
     }
     // 유저가 없다면 새 유저 생성
     else {
@@ -194,7 +203,10 @@ router.delete("/user/:userID", async (req, res) => {
 router.patch("/user/:userID", async (req, res) => {
   try {
     //const id = req.params.userID;
-    const updatedData = req.body;
+    const updatedData = {
+      userName: req.body.userName,
+      userAddress: req.body.userAddress,
+    };
     const options = { new: true };
 
     //await User.findByIdAndUpdate(id, updatedData, options);
@@ -250,8 +262,7 @@ router.post("/order", async (req, res) => {
       orderStatus: req.body.orderStatus,
       orderTime: req.body.orderTime,
       orderedDinner: req.body.orderedDinner,
-      dinner: req.body.dinner,
-      style: req.body.style,
+      orderedStyle: req.body.orderedStyle,
     });
 
     // updating user's orderNum and saving
@@ -392,14 +403,10 @@ router.patch("/ingredient", async (req, res) => {
     const ingredientsToUpdate = req.body; // a whole array of updated ingredients, in model form
     for (let i = 0; i < ingredientsToUpdate.length; i++) {
       const ingInfoNew = ingredientsToUpdate[i];
-      const ingName = ingInfoNew.ingredientName;
-      await Ingredient.findOneAndUpdate(
-        { ingredientName: ingName },
-        ingInfoNew,
-        {
-          new: true,
-        }
-      );
+      const ingName = ingInfoNew._id;
+      await Ingredient.findOneAndUpdate({ _id: ingName }, ingInfoNew, {
+        new: true,
+      });
     }
     res.status(200).json({ status: 200 });
   } catch (error) {
@@ -424,7 +431,7 @@ router.post("/cook", async (req, res) => {
 router.get("/cook", async (req, res) => {
   try {
     const order = await Order.find({
-      $or: [{ orderStatus: "NOT_RECEIVED" }, { orderStatus: "COOKING" }],
+      orderStatus: "NOT_RECEIVED",
     });
     res.status(200).json(order);
   } catch (error) {
@@ -432,13 +439,14 @@ router.get("/cook", async (req, res) => {
   }
 });
 // 요리사의 조리 목록 조회
+// COOKING
 router.get("/cook/:cookID", async (req, res) => {
   try {
-    const cook = await Cook.findOne({ _id: req.params.cookID });
+    const cook = await Cook.findOne({ cookID: req.params.cookID });
     const itemsToCook = [];
     for (const orderID of cook.itemsToCook) {
       const order = await Order.findOne({ _id: orderID });
-      itemsToCook.push(order);
+      if (order.orderStatus == "COOKING") itemsToCook.push(order);
     }
     res.status(200).json(itemsToCook);
   } catch (error) {
@@ -447,6 +455,8 @@ router.get("/cook/:cookID", async (req, res) => {
 });
 
 // 조리 시작
+
+// TODO: 주문에 따라서 식자재가 차감되도록 한다.
 router.post("/cook/:cookID/:orderID", async (req, res) => {
   try {
     const cook = await Cook.findOne({ cookID: req.params.cookID });
@@ -455,6 +465,7 @@ router.post("/cook/:cookID/:orderID", async (req, res) => {
     cook.save();
     order.orderStatus = "COOKING";
     order.save();
+
     res.status(200).json({ status: 200 });
   } catch (error) {
     res.status(404).json({
@@ -468,13 +479,72 @@ router.patch("/cook/:cookID/:orderID", async (req, res) => {
   try {
     const cook = await Cook.findOne({ cookID: req.params.cookID });
     const order = await Order.findOne({ _id: req.params.orderID });
+    console.log(order);
     order.orderStatus = "COOKING_FINISHED";
     order.save();
+
+    order.orderedItems.forEach(async function (item) {
+      let itemName = item.name;
+      let itemNum = item.amount;
+      console.log(itemName);
+      let ing1, ing2;
+      switch (itemName) {
+        case "샐러드":
+          ing1 = await Ingredient.findOne({ _id: "채소믹스" });
+          ing2 = await Ingredient.findOne({ _id: "닭가슴살" });
+          ing1.remainingNum -= itemNum;
+          ing2.remainingNum -= itemNum;
+          ing1.save();
+          ing2.save();
+          //ing1.save
+          break;
+        case "에그 스크램블":
+          ing1 = await Ingredient.findOne({ _id: "달걀" });
+          ing1.remainingNum -= itemNum;
+          ing1.save();
+          break;
+        case "베이컨":
+          ing1 = await Ingredient.findOne({ _id: "베이컨" });
+          ing1.remainingNum -= itemNum;
+          ing1.save();
+          break;
+        case "바게트빵":
+          ing1 = await Ingredient.findOne({ _id: "바게트" });
+          ing1.remainingNum -= itemNum;
+          ing1.save();
+          break;
+        case "스테이크":
+          ing1 = await Ingredient.findOne({ _id: "소고기" });
+          ing2 = await Ingredient.findOne({ _id: "버터" });
+          ing1.remainingNum -= itemNum;
+          ing2.remainingNum -= itemNum;
+          ing1.save();
+          ing2.save();
+          break;
+        case "와인":
+          ing1 = await Ingredient.findOne({ _id: "와인" });
+          ing1.remainingNum -= itemNum;
+          ing1.save();
+          break;
+        case "샴페인":
+          ing1 = await Ingredient.findOne({ _id: "샴페인" });
+          ing1.remainingNum -= itemNum;
+          ing1.save();
+          break;
+        case "커피":
+          ing1 = await Ingredient.findOne({ _id: "커피원두" });
+          ing1.remainingNum -= itemNum;
+          ing1.save();
+          break;
+
+        default:
+      }
+    });
 
     // delete orderID from cook's itemsToCook array
     const toDeleteIndex = 0;
     for (let i = 0; i < cook.itemsToCook.length; i++) {
-      if (cook.itemsToCook[i]._id === order._id) {
+      if (cook.itemsToCook[i] === order._id) {
         toDeleteIndex = i;
       }
     }
@@ -512,7 +582,7 @@ router.post("/rider", async (req, res) => {
 router.get("/delivery", async (req, res) => {
   try {
     const order = await Order.find({
-      $or: [{ orderStatus: "COOKING_FINISHED" }, { orderStatus: "DELIVERING" }],
+      orderStatus: "COOKING_FINISHED",
     });
     res.status(200).json(order);
   } catch (error) {
@@ -526,7 +596,8 @@ router.get("/delivery/:riderID", async (req, res) => {
     const itemsToDeliver = [];
     for (const orderID of rider.itemsToDeliver) {
       const order = await Order.findOne({ _id: orderID });
-      itemsToDeliver.push(order);
+
+      if (order.orderStatus == "DELIVERING") itemsToDeliver.push(order);
     }
     res.status(200).json(itemsToDeliver);
   } catch (error) {
@@ -562,7 +633,7 @@ router.patch("/delivery/:riderID/:orderID", async (req, res) => {
     // delete orderID from rider's itemsToDeliver array
     const toDeleteIndex = 0;
     for (let i = 0; i < rider.itemsToDeliver.length; i++) {
-      if (rider.itemsToDeliver[i]._id === orderID) {
+      if (rider.itemsToDeliver[i] === order._id) {
         toDeleteIndex = i;
       }
     }
